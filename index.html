@@ -1,0 +1,247 @@
+<html>
+  <head>
+    <title>INFO 5321 - Homework 1</title>
+
+    <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.14.2/highlight.min.js"></script>
+    <script src="https://d3js.org/d3.v5.min.js"></script>
+    <script src="https://d3js.org/topojson.v2.min.js"></script>
+  </head>
+
+  <body>
+    <div class="container larger">
+      <h2>A map of SF trees:</h2>
+      <p>Distribution of Tree Sizes by Caretaker:</p>
+      <svg
+        id="boxplot"
+        height="600"
+        width="900"
+        style="background: #fff; margin-top: 50px"
+      ></svg>
+
+      <script>
+        d3.csv("./Street_Tree_List-2022-01-30_FILTERED.csv")
+          .then(function (data) {
+            var svg = d3.select("svg"),
+              margin = { top: 20, right: 20, bottom: 30, left: 40 },
+              width = +svg.attr("width") - margin.left - margin.right,
+              height = +svg.attr("height") - margin.top - margin.bottom,
+              g = svg
+                .append("g")
+                .attr(
+                  "transform",
+                  "translate(" + margin.left + "," + margin.top + ")"
+                );
+
+            var x = d3
+              .scaleBand()
+              .rangeRound([0, width])
+              .paddingInner(0.1)
+              .align(0.1);
+
+            var y = d3.scaleLinear().rangeRound([height, 0]);
+
+            var keys = ["Private", "DPW"];
+
+            var boxPlotData = [];
+            data.forEach(function (d) {
+              d.DBH = +d.DBH;
+            });
+
+            var caretakerData = d3
+              .nest()
+              .key(function (d) {
+                return d.qCaretaker;
+              })
+              .rollup(function (leaves) {
+                // Sort the leaves to ensure correct quantile calculation
+                var sortedLeaves = leaves
+                  .map(function (d) {
+                    return d.DBH;
+                  })
+                  .sort(function (a, b) {
+                    return a - b;
+                  });
+                var q1 = d3.quantile(sortedLeaves, 0.25);
+                var median = d3.quantile(sortedLeaves, 0.5);
+                var q3 = d3.quantile(sortedLeaves, 0.75);
+                var interQuantileRange = q3 - q1;
+                var min = q1 - 1.5 * interQuantileRange;
+                var max = q3 + 1.5 * interQuantileRange;
+                return {
+                  q1: q1,
+                  median: median,
+                  q3: q3,
+                  min: Math.max(min, d3.min(sortedLeaves)), // Ensure min is not less than the actual min
+                  max: Math.min(max, d3.max(sortedLeaves)), // Ensure max is not more than the actual max
+                };
+              })
+              .entries(
+                data.filter(function (d) {
+                  return keys.includes(d.qCaretaker);
+                })
+              ); // Ensure filtering is done here
+
+            console.log(caretakerData);
+
+            // Set the domain for the x-axis
+            x.domain(
+              caretakerData.map(function (d) {
+                return d.key;
+              })
+            );
+            // Set the domain for the y-axis
+            y.domain([
+              0,
+              d3.max(caretakerData, function (d) {
+                return d.value.max;
+              }),
+            ]).nice();
+
+            // Add the x-axis
+            g.append("g")
+              .attr("class", "axis axis--x")
+              .attr("transform", "translate(0," + height + ")")
+              .call(d3.axisBottom(x));
+
+            // Add the y-axis
+            g.append("g")
+              .attr("class", "axis axis--y")
+              .call(d3.axisLeft(y).ticks(10, "s"))
+              .append("text")
+              .attr("transform", "rotate(-90)")
+              .attr("y", 6)
+              .attr("dy", "0.71em")
+              .attr("text-anchor", "end")
+              .text("DBH (cm)");
+
+            // Draw the box plots
+            var boxWidth = 180;
+            caretakerData.forEach(function (d) {
+              var classSelector = "box-" + d.key.replace(/ /g, '-');
+              console.log("Data for group", d.key, ":", d.value);
+              
+              g.selectAll("." + classSelector)
+                .data([d])
+                .enter()
+                .append("rect")
+                .attr("class", classSelector)
+                .attr("x", function (d) {
+                  return x(d.key) + (x.bandwidth() - boxWidth) / 2;
+                })
+                .attr("y", function (d) {
+                  return y(d.value.q3);
+                })
+                .attr("height", function (d) {
+                  return y(d.value.q1) - y(d.value.q3);
+                })
+                .attr("width", boxWidth)
+                .attr("stroke", "black")
+                .style("fill", "lightgreen");
+                
+
+              // Median line
+              var medianClassSelector = "median-" + d.key.replace(/ /g, '-');
+              g.selectAll("." + medianClassSelector)
+                .data([d])
+                .enter()
+                .append("line")
+                .attr("class", medianClassSelector)
+                .attr("x1", function (d) {
+                  return x(d.key) + (x.bandwidth() - boxWidth) / 2;
+                })
+                .attr("x2", function (d) {
+                  return x(d.key) + (x.bandwidth() + boxWidth) / 2;
+                })
+                .attr("y1", function (d) {
+                  return y(d.value.median);
+                })
+                .attr("y2", function (d) {
+                  return y(d.value.median);
+                })
+                .attr("stroke", "black");
+
+              var whiskerHeight = boxWidth / 2;
+              g.selectAll(".whisker-min")
+                .data([d])
+                .enter()
+                .append("line")
+                .attr("class", "whisker")
+                .attr("x1", function (d) {
+                  return x(d.key) + x.bandwidth() / 2;
+                })
+                .attr("x2", function (d) {
+                  return x(d.key) + x.bandwidth() / 2;
+                })
+                .attr("y1", function (d) {
+                  return y(d.value.min);
+                })
+                .attr("y2", function (d) {
+                  return y(d.value.q1);
+                })
+                .attr("stroke", "black");
+
+              g.selectAll(".whisker-max")
+                .data([d])
+                .enter()
+                .append("line")
+                .attr("class", "whisker")
+                .attr("x1", function (d) {
+                  return x(d.key) + x.bandwidth() / 2;
+                })
+                .attr("x2", function (d) {
+                  return x(d.key) + x.bandwidth() / 2;
+                })
+                .attr("y1", function (d) {
+                  return y(d.value.q3);
+                })
+                .attr("y2", function (d) {
+                  return y(d.value.max);
+                })
+                .attr("stroke", "black");
+
+              g.selectAll(".whisker-tick-min")
+                .data([d])
+                .enter()
+                .append("line")
+                .attr("class", "whisker-tick")
+                .attr("x1", function (d) {
+                  return x(d.key) + (x.bandwidth() - whiskerHeight) / 2;
+                })
+                .attr("x2", function (d) {
+                  return x(d.key) + (x.bandwidth() + whiskerHeight) / 2;
+                })
+                .attr("y1", function (d) {
+                  return y(d.value.min);
+                })
+                .attr("y2", function (d) {
+                  return y(d.value.min);
+                })
+                .attr("stroke", "black");
+
+              g.selectAll(".whisker-tick-max")
+                .data([d])
+                .enter()
+                .append("line")
+                .attr("class", "whisker-tick")
+                .attr("x1", function (d) {
+                  return x(d.key) + (x.bandwidth() - whiskerHeight) / 2;
+                })
+                .attr("x2", function (d) {
+                  return x(d.key) + (x.bandwidth() + whiskerHeight) / 2;
+                })
+                .attr("y1", function (d) {
+                  return y(d.value.max);
+                })
+                .attr("y2", function (d) {
+                  return y(d.value.max);
+                })
+                .attr("stroke", "black");
+            });
+          })
+          .catch(function (error) {
+            console.log(error);
+          });
+      </script>
+    </div>
+  </body>
+</html>
