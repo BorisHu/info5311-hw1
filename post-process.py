@@ -21,6 +21,8 @@ def passes_filter(row):
     #   Only trees that have a DBH provided
     elif len(row['DBH']) < 1:
         return False
+    elif row['qCaretaker'] not in ['Private', 'DPW']:
+        return False
     else:
         return True
     
@@ -29,7 +31,7 @@ def passes_filter(row):
 # import and run passes_filter
 data = []
 header = []
-with open('Street_Tree_List-2022-01-30_RAW.csv','r') as f:
+with open('Street_Tree_List-2022-01-30_RAW.csv','r', newline='') as f:
     reader = csv.DictReader(f)
     
     header = reader.fieldnames
@@ -42,7 +44,7 @@ with open('Street_Tree_List-2022-01-30_RAW.csv','r') as f:
 print(len(data))
 
 # export to new CSV       
-with open('Street_Tree_List-2022-01-30_FILTERED.csv','w') as f:
+with open('Street_Tree_List-2022-01-30_FILTERED.csv','w', newline='') as f:
     writer = csv.DictWriter(f, fieldnames=header)
     writer.writeheader()
     writer.writerows(data)
